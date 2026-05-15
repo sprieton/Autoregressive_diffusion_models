@@ -41,6 +41,7 @@ class TinyTimeViT(nn.Module):
         self.patch_size = patch_size
         self.num_patches = (img_size // patch_size) ** 2
         self.emb_dim = emb_dim
+        self.img_size = img_size
         self.num_classes = cfg.num_clases
 
         # --- patch embedding ---

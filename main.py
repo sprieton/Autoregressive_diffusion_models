@@ -34,7 +34,7 @@ testset = DataLoader(test_dataset, batch_size=cfg.bach_size, shuffle=False)
 
 # 2. Configurate the model, optimizer and trainer
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-models = [LeNetWithTime().to(device), TinyTimeViT().to(device)]
+models = [TinyTimeViT().to(device), LeNetWithTime().to(device)]
 model_names = ['LeNetWithTime', 'TinyTimeViT']
 
 for model, name in zip(models, model_names):
@@ -63,5 +63,5 @@ for model, name in zip(models, model_names):
 
     df = pd.DataFrame(records)
     time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    df.to_csv(f'{cfg.results_dir}{name}/training_history.csv_{time_stamp}', index=False)
+    df.to_csv(f'{cfg.results_dir}/{name}training_history.csv_{time_stamp}', index=False)
     print("Training history saved to taining_history.csv")
