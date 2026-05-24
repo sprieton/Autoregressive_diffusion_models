@@ -11,14 +11,15 @@ import numpy as np
 import torch
 
 
-def load_mushroom(val_frac=0.2, seed=0):
+def load_mushroom(val_frac=0.15, test_frac=0.15, seed=0):
     """Fetch and integer-encode the UCI Mushroom dataset.
 
     The target (edible/poisonous) is modelled as one more categorical column,
-    so the model learns the full joint over features + label.
+    so the model learns the full joint over features + label. The data is split
+    train / val / test, stratified on the target.
 
     Returns a dict with:
-        train_x, val_x : LongTensor (N, D) integer category codes
+        train_x, val_x, test_x : LongTensor (N, D) integer category codes
         cardinalities  : list[int] length D, number of categories per column
         num_classes    : int = max(cardinalities) + 1 (last index = absorbing)
         valid_mask     : BoolTensor (D, num_classes), True where category valid
@@ -55,18 +56,26 @@ def load_mushroom(val_frac=0.2, seed=0):
         valid_mask[j, :k] = True
 
     from sklearn.model_selection import train_test_split
+    # First peel off the test set, then split the rest into train / val.
+    train_codes, test_codes = train_test_split(
+        codes, test_size=test_frac, random_state=seed, stratify=codes[:, target_idx]
+    )
+    val_size = val_frac / (1.0 - test_frac)
     train_codes, val_codes = train_test_split(
-        codes, test_size=val_frac, random_state=seed, stratify=codes[:, target_idx]
+        train_codes, test_size=val_size, random_state=seed,
+        stratify=train_codes[:, target_idx]
     )
 
     return {
         "train_x": torch.from_numpy(train_codes),
         "val_x": torch.from_numpy(val_codes),
+        "test_x": torch.from_numpy(test_codes),
         "cardinalities": cardinalities,
         "num_classes": num_classes,
         "valid_mask": valid_mask,
         "target_idx": target_idx,
         "D": D,
+        "columns": list(df.columns),
     }
 
 

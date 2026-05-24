@@ -6,6 +6,8 @@ version but operates on (B, D) integer vectors and adds two tabular specifics:
     - per-column logit masking: each column only scores its own categories.
 """
 
+import math
+
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -94,6 +96,9 @@ class Sampler_OA_ARDMs_Tabular:
         sigma = torch.stack(
             [torch.randperm(self.D, device=self.device) for _ in range(B)]
         )
+        # Reveal positions in value order: the mask marks j observed iff
+        # sigma[j] < t, so the position generated at step t is argsort(sigma)[t].
+        order = sigma.argsort(dim=1)
         idx = torch.arange(B, device=self.device)
         for t in range(self.D):
             mask = (sigma < t).float()
@@ -102,7 +107,7 @@ class Sampler_OA_ARDMs_Tabular:
             )
             logits = self.model(feats, temb)
             logits = logits.masked_fill(~self.valid_mask.unsqueeze(0), float("-inf"))
-            pos = sigma[:, t]
+            pos = order[:, t]
             probs = torch.softmax(logits[idx, pos], dim=-1)
             x[idx, pos] = torch.multinomial(probs, 1).squeeze(-1)
         return x
@@ -116,11 +121,17 @@ class TabularTrainer:
         self.device = device
         self.model = model.to(device)
         self.target_idx = target_idx
+        self.D = D
         self.train_loader = train_loader
         self.val_loader = val_loader
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.algo2 = Trainer_OA_ARDMs_Tabular(
             model, num_classes, D, valid_mask, emb_dim, device
+        )
+        # The input-processing embeddings are learnable and must be optimized
+        # alongside the network; the sampler reuses this same trained module.
+        self.optimizer = torch.optim.Adam(
+            list(self.model.parameters())
+            + list(self.algo2.input_processing.parameters()), lr=lr
         )
         self.sampler = Sampler_OA_ARDMs_Tabular(
             model, self.algo2.input_processing, num_classes, D, valid_mask, device
@@ -139,25 +150,47 @@ class TabularTrainer:
         return total / len(self.train_loader.dataset)
 
     @torch.no_grad()
-    def val_epoch(self, K=5):
+    def evaluate(self, loader, K=5):
+        """Average NLL (nats) and bits-per-dimension, overall and per target class.
+
+        The training loss already estimates the per-sample NLL in nats (the
+        sampled term of the likelihood bound, scaled by D), so
+        bpd = NLL_nats / (D * ln 2).
+        """
         self.model.eval()
         per_class = defaultdict(list)
-        for (x,) in tqdm(self.val_loader, desc="val", leave=False):
+        all_nll = []
+        for (x,) in tqdm(loader, desc="eval", leave=False):
             x = x.to(self.device)
             losses = torch.zeros(x.size(0), device=self.device)
             for _ in range(K):
                 losses += self.algo2(x, return_per_sample=True)
             losses /= K
+            all_nll.extend(l.item() for l in losses)
             for l, c in zip(losses, x[:, self.target_idx]):
                 per_class[int(c.item())].append(l.item())
-        return {c: sum(v) / len(v) for c, v in per_class.items()}
+
+        denom = self.D * math.log(2.0)
+        nll = sum(all_nll) / len(all_nll)
+        per_class_nll = {c: sum(v) / len(v) for c, v in per_class.items()}
+        return {
+            "nll": nll,
+            "bpd": nll / denom,
+            "per_class_nll": per_class_nll,
+            "per_class_bpd": {c: v / denom for c, v in per_class_nll.items()},
+        }
 
     def fit(self, epochs, K=5):
-        history = {"train_loss": [], "val_loss_per_class": []}
+        history = {"train_loss": [], "val_nll": [], "val_bpd": [],
+                   "val_per_class_bpd": []}
         for e in range(epochs):
             tr = self.train_epoch()
-            va = self.val_epoch(K)
+            va = self.evaluate(self.val_loader, K)
             history["train_loss"].append(tr)
-            history["val_loss_per_class"].append(va)
-            print(f"Epoch {e + 1}/{epochs}  train NLL {tr:.4f}  val per class {va}")
+            history["val_nll"].append(va["nll"])
+            history["val_bpd"].append(va["bpd"])
+            history["val_per_class_bpd"].append(va["per_class_bpd"])
+            print(f"Epoch {e + 1}/{epochs}  train NLL {tr:.3f}  "
+                  f"val bpd {va['bpd']:.4f}  per-class bpd "
+                  f"{ {c: round(v, 3) for c, v in va['per_class_bpd'].items()} }")
         return history
