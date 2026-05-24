@@ -64,32 +64,37 @@ def fig_mnist_samples(model="LeNetWithTime"):
 
 
 # ----------------------------------------------- Fig 4: tabular marginal fidelity
-def fig_tabular_marginals(model="MLPWithTime"):
+def fig_tabular_marginals(models=("MLPWithTime", "TabTransformer")):
+    """Real vs generated category marginals for both models, side by side
+    (one row per model, three representative columns)."""
     meta = json.load(open(f"{RES}/tabular_meta.json"))
     cols, card = meta["columns"], meta["cardinalities"]
     real = np.load(f"{RES}/tabular_real_test.npy")
-    gen = np.load(f"{RES}/tabular_gen_{model}.npy")
 
-    # choose 3 informative columns: the target, the highest-cardinality, a mid one.
     tgt = meta["target_idx"]
-    hi = int(np.argmax(card))
-    mid = int(np.argsort(card)[len(card) // 2])
+    hi = int(np.argmax(card))                       # highest-cardinality column
+    mid = int(np.argsort(card)[len(card) // 2])     # a mid-cardinality column
     chosen = list(dict.fromkeys([tgt, hi, mid]))[:3]
 
-    fig, axes = plt.subplots(1, len(chosen), figsize=(7.0, 2.4))
-    if len(chosen) == 1:
-        axes = [axes]
-    for ax, j in zip(axes, chosen):
-        k = card[j]
-        rp = np.bincount(real[:, j], minlength=k)[:k] / len(real)
-        gp = np.bincount(gen[:, j], minlength=k)[:k] / len(gen)
-        x = np.arange(k)
-        ax.bar(x - 0.2, rp, width=0.4, label="real")
-        ax.bar(x + 0.2, gp, width=0.4, label="generated")
-        ax.set_title(f"{cols[j]} ({k} cats)", fontsize=8)
-        ax.set_xticks(x)
-        ax.tick_params(labelsize=6)
-        ax.legend(fontsize=6, frameon=False)
+    fig, axes = plt.subplots(len(models), len(chosen), figsize=(7.0, 4.0))
+    for r, model in enumerate(models):
+        gen = np.load(f"{RES}/tabular_gen_{model}.npy")
+        for c, j in enumerate(chosen):
+            ax = axes[r, c]
+            k = card[j]
+            rp = np.bincount(real[:, j], minlength=k)[:k] / len(real)
+            gp = np.bincount(gen[:, j], minlength=k)[:k] / len(gen)
+            x = np.arange(k)
+            ax.bar(x - 0.2, rp, width=0.4, label="real")
+            ax.bar(x + 0.2, gp, width=0.4, label="generated")
+            ax.set_xticks(x)
+            ax.tick_params(labelsize=6)
+            if r == 0:
+                ax.set_title(f"{cols[j]} ({k})", fontsize=8)
+            if c == 0:
+                ax.set_ylabel(model, fontsize=8)
+            if r == 0 and c == len(chosen) - 1:
+                ax.legend(fontsize=6, frameon=False)
     fig.tight_layout()
     fig.savefig(f"{FIG}/tabular_marginals.pdf")
     print("wrote figs/tabular_marginals.pdf")
