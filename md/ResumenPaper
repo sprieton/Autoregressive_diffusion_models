@@ -1,0 +1,123 @@
+# Modelos de Difusión Autorregresivos (ARDM): Análisis de Arquitectura y Rendimiento. 
+Resumen del paper AUTOREGRESSIVE DIFFUSION MODELS
+Emiel Hoogeboom∗, Alexey A. Gritsenko, Jasmijn Bastings, Ben Poole, Rianne van den Berg, Tim Salimans Google Research e.hoogeboom@uva.nl,{agritsenko,pooleb,bastings,salimans}@google.com, riannevdberg@gmail.com
+
+## Resumen Ejecutivo
+
+Los Modelos de Difusión Autorregresivos (ARDM) representan una nueva clase de modelos generativos que unifican y generalizan los modelos autorregresivos agnósticos al orden y la difusión discreta por absorción. Desarrollados por investigadores de Google Research, los ARDM superan las limitaciones de los modelos autorregresivos (ARM) estándar al eliminar las restricciones arquitectónicas de enmascaramiento causal y permitir la generación paralela adaptable.
+
+Los hallazgos principales indican que los ARDM:
+
+1. **Son eficientes en el entrenamiento:** Utilizan un objetivo de paso único escalable a datos de alta dimensionalidad.
+2. **Optimizan la inferencia:** Requieren significativamente menos pasos que los modelos de difusión discreta para alcanzar el mismo rendimiento.
+3. **Destacan en compresión:** Superan a los métodos existentes en compresión de imágenes sin pérdidas, especialmente en la compresión de puntos de datos individuales (por imagen), evitando la sobrecarga de los métodos basados en bits-back coding.
+4. **Soportan escalado de profundidad:** Permiten generar datos mediante un proceso de refinamiento progresivo (upscaling), lo que mejora los resultados en audio e imágenes.
+
+---
+
+## 1. Fundamentos y Definiciones Core
+
+### 1.1 Modelos Autorregresivos (ARM) y Limitaciones
+
+Los ARM tradicionales factorizan una distribución conjunta en un producto de condicionales. Aunque efectivos, presentan dos desafíos principales:
+
+- **Orden Predefinido:** Requieren un orden de generación fijo, lo cual es arbitrario para modalidades como imágenes.
+- **Costo de Muestreo:** Generar un dato requiere tantas llamadas a la red neuronal como dimensiones tenga el dato (D).
+
+### 1.2 Modelos de Difusión Discreta
+
+Definen un proceso de destrucción sobre datos discretos (como la difusión por absorción), donde las variables decaen a un estado de absorción. El proceso inverso se aprende para generar datos, pero suele requerir un número elevado de pasos para ser efectivo.
+
+### 1.3 La Propuesta ARDM
+
+Los ARDM se introducen como una generalización que permite generar variables en cualquier orden. Se entrenan mediante un objetivo similar al de BERT, donde se enmascaran y predicen múltiples tokens simultáneamente.
+
+---
+
+## 2. Arquitectura y Metodología Técnica
+
+### 2.1 Objetivo de Entrenamiento
+
+A diferencia de los ARM estándar que optimizan toda la verosimilitud de un punto de datos, los ARDM optimizan un componente de la verosimilitud muestreado ($L_t$). El objetivo se define mediante la reponderación de la esperanza sobre todas las permutaciones posibles ($\sigma$):
+
+$$\log p(x) \geq \mathbb{E}_{t \sim U(1,\ldots,D)} \left[ D \cdot L_t \right]$$
+
+Donde $L_t$ representa el componente de verosimilitud para el paso $t$. Esto permite que el modelo se entrene como una colección de "BERTs" con diferentes niveles de enmascaramiento.
+
+### 2.2 Parametrización y Enmascaramiento
+
+- **Entrada:** El modelo recibe un vector donde las variables no generadas están en un estado de absorción (representado como un vector $a$ o un valor específico).
+- **Máscara:** Se utiliza una máscara booleana $m$ para indicar qué variables están presentes.
+- **Red Neuronal:** Una única red compartida $f$ predice los parámetros de la distribución para todas las dimensiones simultáneamente.
+
+### 2.3 Algoritmos de Operación
+
+| Proceso | Descripción Breve |
+|---|---|
+| **Muestreo (Sampling)** | Se inicializa $x$ en el estado de absorción. Se muestrea un orden $\sigma$ y se generan las variables una a una o en grupos paralelos. |
+| **Optimización** | Se muestrea un paso $t$ y una permutación $\sigma$. Se calcula la pérdida basada únicamente en las variables enmascaradas, permitiendo señales de optimización más fuertes al predecir múltiples dimensiones a la vez. |
+
+---
+
+## 3. Capacidades Avanzadas
+
+### 3.1 Generación Paralela
+
+Los ARDM permiten la generación independiente de múltiples variables simultáneamente. Utilizando algoritmos de programación dinámica, se puede adaptar el proceso de generación a cualquier presupuesto de cómputo.
+
+- **Costo de Transición:** Se define una matriz de costo $L_{t,\, t+k} = k \cdot L_t$ para determinar cuántas variables procesar en paralelo.
+- **Eficiencia:** El algoritmo tiende a dedicar más pasos a regiones con grandes diferencias en los componentes de pérdida $L_t$ y menos pasos donde la pérdida es estable.
+
+### 3.2 Escalado de Profundidad (Depth Upscaling)
+
+En lugar de generar variables de una sola vez, este proceso divide la generación en etapas de refinamiento:
+
+1. **Bit-Upscaling:** Generación del bit más significativo primero, seguido de los bits subsecuentes.
+2. **Mapas de Destrucción:** Se definen matrices de transición $P(s)$ que determinan cómo un valor decae hacia el estado de absorción.
+3. **Ventaja:** No aumenta la complejidad computacional durante el entrenamiento, permitiendo experimentar con múltiples etapas sin costo adicional.
+
+---
+
+## 4. Análisis de Resultados Empíricos
+
+### 4.1 Modelado de Texto (text8)
+
+En tareas de modelado de caracteres, los ARDM demostraron ser superiores a los Transformers agnósticos al orden (OA-Transformer) y competitivos con modelos de difusión de 1000 pasos, utilizando solo una fracción de los mismos.
+
+| Modelo | Pasos | NLL (bpc) |
+|---|---|---|
+| OA-Transformer | 250 | 1.64 |
+| D3PM-absorbing | 1000 | 1.45 |
+| **OA-ARDM (Ours)** | **250** | **1.43** |
+| Parallel OA-ARDM | 20 | 1.51 |
+
+### 4.2 Compresión de Imágenes sin Pérdidas (CIFAR-10)
+
+Los ARDM son excepcionalmente aptos para la compresión por imagen, superando a métodos como IDF++ y VDM en este escenario.
+
+| Modelo | Pasos | Compresión por imagen (bpd) | Compresión de dataset (bpd) |
+|---|---|---|---|
+| VDM | 1000 | ≥ 8 | 2.72 |
+| **ARDM-Upscale 4** | **500** | **2.71** | **2.71** |
+| IDF++ | — | 3.26 | 3.26 |
+| FLIF | — | 4.19 | 4.19 |
+
+### 4.3 Modelado de Audio (SC09)
+
+El uso de escalado de profundidad mostró una mejora significativa en el rendimiento para audio (16 kHz), donde un OA-ARDM estándar alcanzó 7.93 bpd, mientras que la versión con factor de escalado 4 mejoró a **6.29 bpd**.
+
+---
+
+## 5. Conclusiones y Limitaciones
+
+El documento concluye que los ARDM son una clase de modelo poderosa que combina la verosimilitud exacta de los ARM con la flexibilidad de entrenamiento de los modelos de difusión.
+
+### Limitaciones identificadas
+
+- **Brecha en Lenguaje:** A pesar de superar a otros modelos agnósticos al orden, todavía existe una brecha de rendimiento frente a los ARM de orden fijo en tareas de texto.
+- **Naturaleza Discreta:** Actualmente están diseñados para variables discretas, aunque la teoría podría extenderse a distribuciones continuas.
+- **Objetivos de Optimización:** El enfoque actual es la verosimilitud (log-likelihood); otros objetivos como la calidad de muestreo visual podrían requerir arquitecturas diferentes.
+
+### Impacto Ético
+
+Se destaca el potencial de estos modelos en áreas como el diseño de fármacos y efectos especiales, pero se advierte sobre su posible uso en la creación de contenido sintético falso.

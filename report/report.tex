@@ -5,9 +5,9 @@
 \usetikzlibrary{arrows.meta,positioning,fit,backgrounds,calc}
 \graphicspath{{figs/}}
 
-\title{Order-Agnostic Autoregressive Diffusion Models:\\ A Cross-Modal Study on Images and Categorical Tabular Data}
-\author{\IEEEauthorblockN{Jorge Barcenilla \quad S. Prieto}% TODO: confirm co-author name
-\IEEEauthorblockA{Probabilistic Machine Learning, Universidad Carlos III de Madrid}}
+\title{Order-Agnostic Autoregressive Diffusion Models on Images and Categorical Tabular Data}
+\author{\IEEEauthorblockN{Jorge Barcenilla \quad Santiago Prieto}
+\IEEEauthorblockA{Probabilistic Machine Learning, Universidad Carlos III de Madrid\\ Project~I}}
 
 \begin{document}
 \maketitle
@@ -25,7 +25,7 @@ families and measured held-out negative log-likelihood in bits per dimension
 (bpd) together with sample fidelity. Convolutional and multilayer-perceptron
 backbones reached 0.139 and 0.609 bpd on the MNIST and Mushroom test sets,
 produced recognizable digit samples, and reproduced categorical marginals with
-a mean total-variation distance below 0.1. The results show that a single
+mean total-variation distances of 0.17 (MLP) and 0.075 (Transformer). The results show that a single
 order-agnostic objective generalizes across heterogeneous data types with only
 modality-specific input handling.
 \end{abstract}
@@ -112,7 +112,8 @@ case.
 
 \section{Experimental Setup}
 MNIST was binarized at threshold $0.5$ and split into 55{,}000 training,
-5{,}000 validation and the standard 10{,}000 test images. Mushroom was encoded
+5{,}000 validation and the standard 10{,}000 test images. The UCI Mushroom
+dataset~\cite{mushroom} was encoded
 column-wise (missing values as their own category, the constant \texttt{veil-
 type} column dropped) with the edible/poisonous label modelled as an additional
 column, and split 70/15/15 stratified on the label. All models were trained
@@ -200,7 +201,7 @@ held-out likelihoods and faithful samples, demonstrating that a single
 order-agnostic objective is a genuinely modality-portable foundation for
 discrete generative modelling.
 
-\clearpage
+\onecolumn
 \appendices
 \section{Software Architecture}
 The implementation isolates a shared algorithmic core from modality-specific
@@ -215,7 +216,7 @@ column admits. The pipelines are reproducible end-to-end
 covered by unit tests for masking, the absorbing token, loss back-propagation
 and sampler validity.
 
-\begin{figure}[t]
+\begin{figure}[h]
 \centering
 \begin{tikzpicture}[
   b/.style={draw,rounded corners,align=center,font=\scriptsize,inner sep=2.5pt,minimum width=20mm},
@@ -239,9 +240,9 @@ training/sampling core.}
 \label{fig:arch}
 \end{figure}
 
-\begin{figure}[t]
+\begin{figure}[h]
 \centering
-\includegraphics[width=\columnwidth]{tabular_marginals.pdf}
+\includegraphics[width=0.7\textwidth]{tabular_marginals.pdf}
 \caption{Empirical (blue) versus generated (orange) category marginals on the
 Mushroom test set for three representative columns. Top: MLPWithTime. Bottom:
 TabTransformer.}
