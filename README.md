@@ -1,4 +1,5 @@
-# OA-ARDM — Code (Project I)
+# OA-ARDM
+_Based on a Google Research_ [_paper_](https://arxiv.org/pdf/2110.02037)
 
 Implementation of Order-Agnostic Autoregressive Diffusion Models (OA-ARDMs)
 applied to two modalities: binarized **MNIST** (images) and the fully
